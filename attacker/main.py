@@ -1,26 +1,25 @@
-import rsa, socket, random, time, sys, threading
+import rsa, socket, random, time, sys, threading, argparse, base64
 from decryption import decrypt_message
 from encryption import encrypt_message
 from message_fragmentation import fragment_message
 from port import get_available_port
-import argparse
 from prompt_toolkit import prompt
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import print_formatted_text
-import base64
 
 parser = argparse.ArgumentParser(description="UDBee - UDP Covert Channel Tool")
 parser.add_argument("-ip", required=True, type=str, help="Target IP address, IPv4 only")
+parser.add_argument("-port", default=27381 ,type=int, help="Target port, default is 27381")
 parser.add_argument("-fragments", type=int, default=12, help="Fragment size, default is 12 byte")
-parser.add_argument("-delay", type=float, default=random.randint(0,3), help="Delay between fragments, default is 0-3")
+parser.add_argument("-delay", type=float, default=round((random.uniform(0, 3)), 1), help="Delay between fragments, default is a float number between 0 and 3")
 parser.add_argument("-buffer", type=float, default=10000, help="Fragments buffer, default is 10000 (to prevent memory overflow)")
 parser.add_argument("-jitter", type=float, default=0.2, help="Random +/- jitter to apply on each fragment delay")
 
 args = parser.parse_args()
 
 target_ip = args.ip
-target_port = 27381
+target_port = args.port
 chunk_size = args.fragments
 delay = args.delay
 buffer_size = args.buffer
@@ -31,12 +30,30 @@ my_priv_key = None
 
 
 def parse_public_key(text: str) -> rsa.PublicKey:
-    text = text.replace("PublicKey(", "").replace(")", "")
-    n_str, e_str = text.split(",")
-    n = int(n_str.strip())
-    e = int(e_str.strip())
-    return rsa.PublicKey(n, e)
+    try:
+        text = text.replace("PublicKey(", "").replace(")", "")
+        n_str, e_str = text.split(",")
+        n = int(n_str.strip())
+        e = int(e_str.strip())
+        return rsa.PublicKey(n, e)
+    # invalid key was received
+    except:
+        return None
 
+def exchange_keys():
+    exchange_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    while True:
+        try:
+            listening_port = get_available_port()
+            exchange_sock.bind(("0.0.0.0", listening_port))
+            break
+        except:
+            continue
+    exchange_sock.sendto("gen_key".encode('utf8'), (target_ip, target_port))
+    exchange_sock.close()
+    print_formatted_text(HTML(f"<ansired>[ ERR ]</ansired> <ansimagenta>Encryption keys was not exchanged, started exchanging now.</ansimagenta>"))
+    get_response(listening_port)
+    return
 
 def get_response(port):
     global target_pub_key, buffer_size, target_ip, my_pub_key, my_priv_key
@@ -157,6 +174,7 @@ def main():
         print_formatted_text(HTML(logo))
         print_formatted_text(HTML("\t🐝 <ansimagenta>UDBee</ansimagenta> <ansicyan>–</ansicyan> <ansigreen>Because TCP Is Too Mainstream</ansigreen>"))
         print_formatted_text(HTML("\t<ansimagenta>Developer:</ansimagenta> <ansicyan>@momhaidat</ansicyan>"))
+        exchange_keys()
         while True:
             command = prompt(HTML('\n<ansicyan>UDBee</ansicyan> <ansimagenta>> </ansimagenta>')).strip()
             if command.lower() in ["exit", "quit"]:
@@ -180,5 +198,9 @@ def main():
 
                 for thread in threads:
                     thread.start()
+                
+                for thread in threads:
+                    thread.join()
+                
 
 main()

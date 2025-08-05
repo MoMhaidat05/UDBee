@@ -5,17 +5,17 @@ def build_stun_attribute(message):
         message = message.encode('utf-8')
 
     length = len(message)
-    attr_type = 0x8022 # Unknown attribute type, to evade detection
-    padded_length = (length + 3) & ~3  # Round up to the nearest multiple of 4
+    attr_type = 0x8022
+    padded_length = (length + 3) & ~3
     padding = b'\x00' * (padded_length  - length)
     attribute = struct.pack('!HH', attr_type, length) + message + padding
     return attribute
 
 
 def build_stun_message(message):
-    message_type = 0x0001 # Binding Request
+    message_type = 0x0001
     magic_cookie = 0x2112A442
-    transaction_id = os.urandom(12) # Random 12-byte transaction ID
+    transaction_id = os.urandom(12)
     attribute = build_stun_attribute(message)
     attribute_length = len(attribute)
     header = struct.pack('!HHI12s', message_type, attribute_length, magic_cookie, transaction_id)

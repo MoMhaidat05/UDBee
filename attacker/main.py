@@ -186,7 +186,7 @@ def get_response(port, start_time):
 # Encrypts and sends a command to the target, fragmenting as needed
 def send_command(message, listening_port):
     try:
-        global my_priv_key, delay, jitter, target_ip, target_port, my_pub_key, target_pub_key
+        global my_priv_key, delay, jitter, target_ip, target_port, my_pub_key, target_pub_key, transmitted_messages
         attacking_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         while True:
             try:

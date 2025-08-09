@@ -164,8 +164,10 @@ def listener():
                 if full_msg.startswith("PublicKey("):
                     target_pub_key = parse_public_key(full_msg)
                     if not exchanged_keys:
-                        log_success(f"<ansigreen>Successfully exchanged keys, all messages from now is encrypted.</ansigreen>")
+                        log_success(f"<ansigreen>Keys was exchanged successfully, all messages from now is encrypted.</ansigreen>")
                         exchanged_keys = True
+                    else:
+                        log_success("<ansigreen>Keys was exchanged successfully.</ansigreen>")
                     total_data_received = 0
                     received_chunks = {}
                     expected_chunks = None
@@ -278,4 +280,4 @@ try:
     main()
 except KeyboardInterrupt:
     log_info("<ansiyellow>Exiting on user interrupt (Ctrl+C)</ansiyellow>")
-    sys.exit(0)
+    exit()

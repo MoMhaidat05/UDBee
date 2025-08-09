@@ -13,7 +13,7 @@ def build_stun_attribute(message):
 
 
 def build_stun_message(message):
-    message_type = 0x0001 # Binding Request
+    message_type = 0x0101 # Binding Response Success
     magic_cookie = 0x2112A442
     transaction_id = os.urandom(12) # Random 12-byte transaction ID
     attribute = build_stun_attribute(message)

@@ -1,4 +1,5 @@
-def fragment_message(message, chunk_size: int = 20):
+def fragment_message(message, chunk_size: int = 256):
+    message = str(message)
     chunks = []
     total = (len(message) + chunk_size - 1) // chunk_size
     for i in range(total):

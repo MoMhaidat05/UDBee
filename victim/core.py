@@ -29,8 +29,9 @@ def parse_public_key(text: str):
         return None
 
 if IS_ADDED_TO_STARTUP == False:
-    if add_to_windows_startup() == 200:
-        IS_ADDED_TO_STARTUP = True
+    if platform.system() == "Windows":
+        if add_to_windows_startup() == 200:
+            IS_ADDED_TO_STARTUP = True
 
 def send_msg(message, is_cached: bool):
     if type(message) is not str:

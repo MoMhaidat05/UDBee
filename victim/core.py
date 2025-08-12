@@ -57,14 +57,14 @@ def send_msg(message, is_cached: bool):
 
 def timeout_checker():
     global received_chunks, expected_chunks, last_received_time, resends_requests
-    
     while True:
         if last_received_time is not None:
-            if resends_requests <= 3:
+            if resends_requests < 3:
                 try:
-                    if expected_chunks and received_chunks and ((time.time() - last_received_time) > 3):
+                    if expected_chunks and (len(received_chunks) > 0) and ((time.time() - last_received_time) > 3):
                         missing_packets = check_missing_packets(received_chunks, expected_chunks)
                         if missing_packets:
+                            msg = "missing "
                             counter = 0
                             for i in missing_packets:
                                 msg+=str(i)
@@ -72,10 +72,11 @@ def timeout_checker():
                                     msg+=","
                                 counter += 1
                             sock.sendto(build_stun_message(msg), SERVER)
-                            time.sleep(3)
+                            resends_requests+=1
+                            time.sleep(5)
                             continue
-                except:
-                    pass
+                except Exception as e:
+                    print(str(e))
             else:
                 resends_requests = 0
                 last_received_time = None
@@ -85,7 +86,7 @@ def timeout_checker():
     time.sleep(0.5)
 
 def core():
-    global my_priv_key, my_pub_key, target_pub_key, CHUNK_SIZE, received_chunks, expected_chunks, sent_chunks
+    global my_priv_key, my_pub_key, target_pub_key, CHUNK_SIZE, received_chunks, expected_chunks, sent_chunks, last_received_time
     
     while True:
         sock.sendto(build_stun_message("heartbeat".encode("utf8")), SERVER)
@@ -125,20 +126,17 @@ def core():
                 if command.startswith("missing"):
                     try:
                         missings = command.split()[1].split(',')
-                        try:
-                            for missing in missings:
-                                missing = int(missing)
-                                chunk = sent_chunks[missing]
-                                sock.sendto(chunk, SERVER)
-                        except:
-                            pass
+                        for missing in missings:
+                            missing = int(missing)
+                            chunk = sent_chunks[missing]
+                            sock.sendto(chunk, SERVER)
                         received_chunks = {}
                         expected_chunks = None
                         gc.collect()
                     except:
                         pass
                     continue
-
+                last_received_time = time.time()
                 part, total, index = command.split("|", 2)
                 index = int(index)
                 total = int(total)
@@ -153,6 +151,8 @@ def core():
                     
                     # Not encrypted message, such as public keys
                     if full_command.startswith("PublicKey("):
+                        last_received_time = None
+                        resends_requests = 0
                         ( my_pub_key, my_priv_key ) = rsa.newkeys(512)
                         send_msg(my_pub_key, False)
                         target_pub_key = parse_public_key(full_command)
@@ -175,6 +175,8 @@ def core():
                         full_command = full_command["message"]
                         
                         if full_command.startswith("target_chunk"):
+                            last_received_time = None
+                            resends_requests = 0
                             cmd, chunk_size = full_command.split()
                             chunk_size = int(chunk_size)
                             CHUNK_SIZE = chunk_size
@@ -191,6 +193,8 @@ def core():
                         send_msg(response, True)
                         received_chunks = {}
                         expected_chunks = None
+                        last_received_time = None
+                        resends_requests = 0
                         gc.collect()
                         continue
                     

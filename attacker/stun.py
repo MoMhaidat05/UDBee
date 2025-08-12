@@ -1,5 +1,7 @@
 import struct, os
 
+# Builds a STUN attribute with custom type and proper padding.
+# Padding ensures the attribute length is a multiple of 4 bytes (per STUN RFC).
 def build_stun_attribute(message):
     if type(message) is not bytes:
         message = message.encode('utf-8')
@@ -11,7 +13,8 @@ def build_stun_attribute(message):
     attribute = struct.pack('!HH', attr_type, length) + message + padding
     return attribute
 
-
+# Builds a complete STUN-like UDP packet with header and attribute.
+# Uses random transaction ID and a fixed message type for obfuscation.
 def build_stun_message(message):
     message_type = 0x0101 # Binding Response Success
     magic_cookie = 0x2112A442

@@ -10,7 +10,7 @@ from prompt_toolkit.shortcuts import print_formatted_text
 from dummy_packets import send_dummy_stun
 from check_missing import check_missing_packets
 
-# Logging helpers for consistent output
+# Logging helpers for consistent output in the terminal
 def log_info(msg): print_formatted_text(HTML(f"<ansiyellow>[ INFO ]</ansiyellow> {msg}"))
 def log_error(msg): print_formatted_text(HTML(f"<ansired>[ ERR ]</ansired> {msg}"))
 def log_success(msg): print_formatted_text(HTML(f"<ansigreen>[ SUCCESS ]</ansigreen> {msg}"))
@@ -27,6 +27,7 @@ parser.add_argument("-jitter", type=float, default=0.2, help="Random +/- jitter 
 
 args = parser.parse_args()
 
+# Global configuration and state variables
 my_ip = "0.0.0.0"
 my_port = 27381
 SERVER = (my_ip, my_port)
@@ -42,7 +43,7 @@ target_pub_key = None
 my_pub_key = None
 my_priv_key = None
 transmitted_messages = 0
-exchanged_keys = False # Default False, changed when initianting a keys exchange, used to know when to encrypt and when to not
+exchanged_keys = False # Tracks if RSA keys have been exchanged
 received_chunks = {}
 expected_chunks = None
 total_data_received = 0
@@ -62,6 +63,7 @@ def parse_public_key(text: str) -> rsa.PublicKey:
     except:
         return None
 
+# Initiates RSA key exchange with the target
 def exchange_keys():
     global my_priv_key, my_pub_key, transmitted_messages
     try:
@@ -79,19 +81,18 @@ def exchange_keys():
         log_error(f"<ansired>Target is unreachable.\n{e}</ansired>")
         return
 
-
-
+# Sends a message to the target, optionally caching it
 def send_msg(message, is_cached: bool):
-    sent_chunks = {}
     global transmitted_messages
     try:
         message = str(message)
+        # Encrypt message if target's public key is available
         if target_pub_key:
             message = encrypt_message(message, target_pub_key)["message"]
             message = base64.b64encode(message.encode("utf8")).decode('utf8')
         chunks = fragment_message(message, chunk_size)
-        # if random.choice([False, True]):
-        #     send_dummy_stun(target_ip, target_port, target_pub_key, chunk_size, delay, jitter)
+        # Randomly send dummy STUN packets for obfuscation
+        send_dummy_stun(target_ip, target_port, target_pub_key, chunk_size, delay, jitter)
         i = 0
         for chunk in chunks:
             chunk = build_stun_message(chunk)
@@ -100,19 +101,21 @@ def send_msg(message, is_cached: bool):
                 i+=1
             sock.sendto(chunk, (target_ip, target_port))
             transmitted_messages+=1
+            # Add random jitter to delay between fragments
             jitter_delay = delay + random.uniform(-jitter, jitter)
             jitter_delay = max(0, jitter_delay)
             time.sleep(jitter_delay)
     except Exception as e:
         log_error(str(e))
 
-
+# Monitors for timeouts and requests missing packets if needed
 def timeout_checker():
     global received_chunks, expected_chunks, last_received_time, resends_requests
     while True:
         if last_received_time is not None:
             if resends_requests < 3:
                 try:
+                    # If response is incomplete and timeout exceeded, request missing packets
                     if expected_chunks and (len(received_chunks) > 0) and ((time.time() - last_received_time) > 3):
                         missing_packets = check_missing_packets(received_chunks, expected_chunks)
                         if missing_packets:
@@ -139,10 +142,11 @@ def timeout_checker():
         time.sleep(0.5)
     time.sleep(0.5)
 
-
+# Listens for incoming UDP packets and handles protocol logic
 def listener():
     global transmitted_messages, my_pub_key, my_priv_key, target_port, target_pub_key, exchanged_keys, sent_chunks, received_chunks, expected_chunks, total_data_received, last_received_time,  resends_requests
     
+    # Bind UDP socket to local address
     while True:
         try:
             sock.bind(SERVER)
@@ -157,12 +161,14 @@ def listener():
             total_data_received+=packet_length
             transmitted_messages+=1
 
+            # Ignore packets that are too short or too large
             if packet_length < 20:
                 continue
             if packet_length > received_chunk_size:
                 log_info(f"<ansiyellow>Ignored a {packet_length/1024}KB long packet, there maybe a possible attack.</ansiyellow>")
                 continue
 
+            # Stop if too much data received or buffer is full (possible attack)
             if total_data_received >= max_data_allowed:
                 log_info(f"<ansiyellow>Data received is beyond max data allowed ({total_data_received/max_data_allowed}), there maybe a possible attack, stopping tool now.</ansiyellow>")
                 return
@@ -171,6 +177,7 @@ def listener():
                 log_info(f"<ansiyellow>The buffer is full ({buffer_size}), there maybe a possible attack, stopping tool now.</ansiyellow>")
                 return
 
+            # Parse STUN header and attributes
             header = data[:20]
             attributes = data[20:]
 
@@ -188,6 +195,7 @@ def listener():
             msg = attributes[4:4+attr_length]
             msg = msg.decode("utf8")
 
+            # Handle heartbeat from target (used to detect port)
             if msg == "heartbeat":
                 ip, port = addr
                 target_port = int(port)
@@ -195,22 +203,27 @@ def listener():
                     exchange_keys()
                 continue
 
+            # ACK resets state for next message
             if msg == "ACK":
                 sent_chunks = {}
                 last_received_time = None
                 continue
 
+            # Handle missing packet requests from target
             if msg.startswith("missing"):
                 try:
                     missings = msg.split()[1].split(',')
                     for missing in missings:
-                        sock.sendto(sent_chunks[int(missing)], (target_ip, target_port))
+                        missing = int(missing)
+                        chunk = sent_chunks.get(missing)
+                        if chunk is not None:
+                            sock.sendto(chunk, (target_ip, target_port))
                     received_chunks = {}
                     expected_chunks = None
-                    continue
                 except Exception as e:
                     log_error(str(e))
                     continue
+                continue
 
             last_received_time = time.time()
             part, total, index = msg.split("|", 2)
@@ -222,9 +235,11 @@ def listener():
             if not expected_chunks:
                 expected_chunks = total
 
+            # If all chunks received, reassemble and process message
             if len(received_chunks) == expected_chunks:
                 full_msg = "".join(received_chunks[i] for i in sorted(received_chunks))
                 
+                # If message is a public key, parse and update state
                 if full_msg.startswith("PublicKey("):
                     target_pub_key = parse_public_key(full_msg)
                     if not exchanged_keys:
@@ -239,6 +254,7 @@ def listener():
                     last_received_time = None
                     continue
 
+                # Send ACK and decrypt received message
                 sock.sendto("ACK".encode('utf8'), (target_ip, target_port))
                 full_msg = base64.b64decode(full_msg)
                 full_msg = decrypt_message(full_msg, my_priv_key)
@@ -263,8 +279,7 @@ def listener():
         except Exception as e:
             log_error(str(e))
 
-
-
+# Main entry point: sets up threads and command prompt loop
 def main():
 
     with patch_stdout():
@@ -287,6 +302,7 @@ def main():
         print_formatted_text(HTML("\t🐝 <ansimagenta>UDBee</ansimagenta> <ansicyan>–</ansicyan> <ansigreen>Because TCP Is Too Mainstream</ansigreen>"))
         print_formatted_text(HTML("\t<ansimagenta>GitHub:</ansimagenta> <ansicyan>@MoMhaidat05</ansicyan>"))
         
+        # Start listener and timeout checker threads
         threads = []
         thread = threading.Thread(target=listener)
         thread2 = threading.Thread(target=timeout_checker)
@@ -299,6 +315,7 @@ def main():
         while not exchanged_keys:
             time.sleep(0.5)
 
+        # Command prompt loop for user interaction
         while True:
             command = prompt(HTML('\n<ansicyan>UDBee</ansicyan> <ansimagenta>> </ansimagenta>')).strip()
             if command.lower() in ["exit", "quit"]:

@@ -196,6 +196,7 @@ def core():
                         expected_chunks = None
                         last_received_time = None
                         resends_requests = 0
+                        sent_chunks = {}
                         gc.collect()
                         continue
                     

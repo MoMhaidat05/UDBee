@@ -270,6 +270,7 @@ def listener():
                 print_formatted_text(HTML(f"<ansigreen>{full_msg}</ansigreen>"))
                 total_data_received = 0
                 received_chunks = {}
+                sent_chunks = {}
                 expected_chunks = None
                 resends_requests = 0
                 continue

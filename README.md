@@ -44,6 +44,7 @@ UDBee establishes an encrypted reverse shell session over UDP, obfuscating traff
 
 - Python 3.7+
 - [attacker/requirements.txt](attacker/requirements.txt) lists required packages:
+  
   ```
   pip install -r attacker/requirements.txt
   ```

